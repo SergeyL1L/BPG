@@ -1,0 +1,136 @@
+//ОПС
+	SoundOPS.cBoiler_Fire := prgOPS.OutVar.Boiler_Fire;
+	SoundOPS.cTechnology_Fire := prgOPS.OutVar.Technology_Fire;
+	
+	SoundOPS.cBoiler_BreakIn := prgOPS.OutVar.Boiler_BreakIn;
+	SoundOPS.cTechnology_BreakIn := prgOPS.OutVar.Technology_BreakIn;
+	
+	IF SoundOPS = 0 THEN	//Это всё заглушки, потом надо сделать лучше
+		SoundOPS_Old := 0;
+	END_IF
+
+IF prgPanel.ptPanel^.Test.TestMode THEN	//Тестирование сигнализации
+	Sound := prgPanel.ptPanel^.Test.BoilerSound;
+	PanelIndicator := FALSE;
+	
+	prgPanel.ptPanel^.Command.Sound_OFF := FALSE;	//Если кто-то нажмёт эту кнопочку на панели
+ELSIF eeBPG_Mode = enBPG_Mode.Maintenance AND SoundOPS = 0 THEN	//В режиме наладки звуковую сигнализацию не включаем (за исключением режима Проверки)
+	Sound.Alarm := FALSE;
+	Sound.Gas := FALSE;
+	Sound.Fire := FALSE;
+	Sound.AlarmRelay := FALSE;
+	PanelIndicator := FALSE;
+	
+	prgPanel.ptPanel^.Command.Sound_OFF := FALSE;	//Если кто-то нажмёт эту кнопочку на панели
+ELSE	//Стандартный режим работы
+	//Загазованность
+	SoundGas.cBoiler_CO_2 := prgGasAnalyzer.OutVar.QE5_1_Threshold2_CO AND eeSensorUsing[cUse_QE5_1_CO];
+	SoundGas.cBoiler_CH4_2 := prgGasAnalyzer.OutVar.QE5_1_Threshold2_CH AND eeSensorUsing[cUse_QE5_1_CH4];
+	SoundGas.cTechnology_CH4_2 := prgGasAnalyzer.OutVar.QE5_2_Threshold2 AND eeSensorUsing[cUse_QE5_2_CH4];
+	
+	
+	//Аварии и предупреждения САУ
+	//Звуковая сигнализация датчиков
+	FOR i := 1 TO cNumSensor DO
+		fcBitSetValue_DWORD(ptDWord:= ADR(SoundAlarm),
+							NumBit:= i,
+							Value:= eeSensorUsing[i] AND arSensors[i].out.StateSingle.Sound);
+	END_FOR
+	
+	//Авария циркуляционных насосов
+	SoundAlarm.cPump1_Sound	:= fbPump1.prState = vsdPumps.enPumpState.Alarm;
+	SoundAlarm.cPump2_Sound	:= fbPump2.prState = vsdPumps.enPumpState.Alarm;
+	
+	//Авария котлов и котловых насосов
+	FOR i := 1 TO cNumBoilers DO
+		fcBitSetValue_DWORD(ptDWord:= ADR(SoundAlarm),
+							NumBit:= cBoiler1_Sound + i - 1,
+							Value:= fbCascade.mAddrBoiler(i)^.out.AlarmCommon);
+							
+		fcBitSetValue_DWORD(ptDWord:= ADR(SoundAlarm),
+							NumBit:= cBoilerPump1_Sound + i - 1,
+							Value:= arBoilerPumps[i].prState = vsdPumps.enPumpState.Alarm);
+	END_FOR
+	
+	//Авария КЭГа
+	SoundAlarm.cKEG_Sound := fbKEG.out.Panel.State = vsdValves.enKegState.Alarm;
+	
+	
+	
+	
+	//==
+	
+	//Включение/автовыключение звуковой сигнализации
+
+	//Сигнализация о пожаре.
+	IF SoundOPS > SoundOPS_Old THEN
+		Sound.Fire := TRUE;
+		Sound.AlarmRelay := TRUE;	//Аварийный сигнал реле типа "сухой контакт"
+		PanelIndicator := FALSE;	//"Взводим" индикатор звуковой сигнализации
+	ELSIF SoundOPS = 0 THEN	//Всё в порядке
+		Sound.Fire := FALSE;
+	END_IF
+
+	SoundOPS_Old := SoundOPS;
+	
+	
+	//Сигнализация загазованности
+	IF SoundGas > SoundGas_Old THEN
+		Sound.Gas := TRUE;
+		Sound.AlarmRelay := TRUE;	//Аварийный сигнал реле типа "сухой контакт"
+		PanelIndicator := FALSE;	//"Взводим" индикатор звуковой сигнализации
+	ELSIF SoundGas = 0 THEN	//Всё в порядке
+		Sound.Gas := FALSE;
+	
+	END_IF
+
+	SoundGas_Old := SoundGas;
+	
+	
+	//Внутренняя авария САУ	(в режиме Наладка сигнализацию не включаем)
+	IF SoundAlarm > SoundAlarm_Old THEN
+		Sound.Alarm := TRUE;
+		Sound.AlarmRelay := TRUE;	//Аварийный сигнал реле типа "сухой контакт"
+		PanelIndicator := FALSE;	//"Взводим" индикатор звуковой сигнализации
+	ELSIF SoundAlarm = 0 THEN	//Всё в порядке
+		Sound.Alarm := FALSE;
+	END_IF
+
+	SoundAlarm_Old := SoundAlarm;
+	
+	
+	//Ну, и, конечно, если все аварийные сигналы пропали (а мы их не отключали), то аварийная сигнализация должна отключиться
+	IF SoundOPS = 0 AND SoundGas = 0 AND SoundAlarm = 0 THEN
+		Sound.AlarmRelay := FALSE;	//Аварийный сигнал реле типа "сухой контакт"
+		PanelIndicator := FALSE;	//Переводим индикатор включения/выключения звуковой индикации в обычный вид
+	END_IF
+	
+	//Поступила команда на отключение звуковой сигнализации						   
+	IF prgPanel.ptPanel^.Command.Sound_OFF THEN
+		Sound.Alarm := FALSE;
+		Sound.Gas := FALSE;
+		Sound.Fire := FALSE;
+	
+		Sound.AlarmRelay := FALSE;	//Аварийный сигнал реле типа "сухой контакт"
+	
+		PanelIndicator := TRUE;	//Переводим индикатор включения/выключения звуковой индикации в вид отключено
+		
+		prgPanel.ptPanel^.Command.Sound_OFF := FALSE;
+	END_IF
+END_IF
+
+//Управление выходами
+fbA6_32R.mSetData(ChanelNum := doutSound1, Value := Sound.Alarm);
+fbA6_32R.mSetData(ChanelNum := doutSound2, Value := Sound.Gas);
+fbA6_32R.mSetData(ChanelNum := doutSound3, Value := Sound.Fire);
+fbA6_32R.mSetData(ChanelNum := doutAlarm_External, Value := Sound.AlarmRelay);	//Аварийный сигнал реле типа "сухой контакт"
+prgPanel.ptPanel^.Status.Sound_Indication := PanelIndicator;
+
+
+
+//Аварийная лампочка - горит всегда, если есть аварийный сигнал
+fbA6_32R.mSetData(ChanelNum := doutAlarm_Lamp,
+				  Value := SoundAlarm > 0 OR
+						   SoundGas > 0 OR
+						   SoundOPS > 0);
+			
