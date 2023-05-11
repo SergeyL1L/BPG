@@ -1,0 +1,37 @@
+//Запрос текущих блокировок
+IF prgPanel.ptPanel^.Blocking.Command.GetData THEN
+	prgPanel.ptPanel^.Blocking.ForSetting := eeSensorUsing;
+	
+	prgPanel.ptPanel^.Blocking.Command.GetData := FALSE;
+END_IF
+
+
+//Сброс всех флагов	(Все датчики блокируются)
+IF prgPanel.ptPanel^.Blocking.Command.ClearAll THEN
+	FOR i := 1 TO cNumBlocking DO
+		prgPanel.ptPanel^.Blocking.ForSetting[i] := FALSE;
+	END_FOR
+	
+	prgPanel.ptPanel^.Blocking.Command.ClearAll := FALSE;
+END_IF
+
+//Установка всех флагов (все датчики используются)
+IF prgPanel.ptPanel^.Blocking.Command.SetAll THEN
+	FOR i := 1 TO cNumBlocking DO
+		prgPanel.ptPanel^.Blocking.ForSetting[i] := TRUE;
+	END_FOR
+	
+	prgPanel.ptPanel^.Blocking.Command.SetAll := FALSE;
+END_IF
+
+//Записать новые блокировки
+IF prgPanel.ptPanel^.Blocking.Command.WriteNew THEN
+	eeSensorUsing := prgPanel.ptPanel^.Blocking.ForSetting;
+	prgPanel.ptPanel^.Blocking.ForArchive := eeSensorUsing;
+	
+	fbEEPROM.actWriteAll();	//Отправляем команду на запись всех переменных в файл
+	
+	prgBlocking.aBlockingSensor();	//Установка блокировок в ФБ датчиков
+	
+	prgPanel.ptPanel^.Blocking.Command.WriteNew := FALSE;
+END_IF
