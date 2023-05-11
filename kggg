@@ -1,0 +1,37 @@
+PLCMode := NOT fbA4_32DN.mGetData(dinKEG_Manual);
+
+//fbKEG.in.Blocking.ExtDisable := 
+
+fbKEG.in.Blocking.Fire := prgOPS.OutVar.Boiler_Fire OR prgOPS.OutVar.Technology_Fire;	//Блокировки при пожаре
+
+fbKEG.in.Operational.PLCMode := PLCMode;
+
+fbKEG.in.Blocking.CO := prgGasAnalyzer.OutVar.QE5_1_Threshold2_CO AND eeSensorUsing[cUse_QE5_1_CO];	//Порог 2 по угарному газу в котельной
+fbKEG.in.Blocking.CH4 := (prgGasAnalyzer.OutVar.QE5_1_Threshold2_CH AND eeSensorUsing[cUse_QE5_2_CH4]) OR	//Порог 2 по метану в котельной
+				(prgGasAnalyzer.OutVar.QE5_2_Threshold2 AND eeSensorUsing[cUse_QE5_1_CH4]);	//Порог 2 по метану в техостеке
+				
+fbKEG.in.Blocking.PressureLow := arSensors[cPT2_2].out.StateSingle.Threshold.AlarmLOW;	//Низкое давление газа на котлы
+fbKEG.in.Blocking.PressureHigh := arSensors[cPT2_2].out.StateSingle.Threshold.AlarmHIGH;	//Высокое давление газа на котлы
+
+fbKEG.in.Blocking.GasHeater := prgGasHeater.GasHeater_AlarmCode = enGasHeater_State_AlarmCode.Alarm_HighPressure;	//Высокое давление в теплообменнике
+
+//fbKEG.in.Alarm.NOT_KM := ;	//Сигнал с пускателя не используется
+fbKEG.in.Alarm.NOT_Position := NOT fbA4_32DN.mGetData(dinKEG_SensorPosition);	//Сигнал обратной связи (с датчика положения)
+
+//Собственно, управление сделаем так. Если включено управление с ПЛК и режим Работа,
+//и нет никаких блокировок, то подаём сигнал на включение КЭГ.
+IF eeBPG_Mode = enBPG_Mode.Auto AND PLCMode AND fbKEG.out.Panel.State = vsdValves.enKegState.OFF THEN	//Режим автоматической работы
+	fbKEG.aON();
+END_IF
+
+
+fbKEG.mExecute();
+
+fbA6_32R.mSetData(ChanelNum := doutKEG, Value := fbKEG.out.Y);	//Сигнал на КЭГ
+
+prgPanel.ptPanel^.KEG.ForPanel := fbKEG.out.Panel;
+prgPanel.ptPanel^.KEG.Status.ON := fbKEG.out.Panel.State = vsdValves.enKegState.ON;	//(для дополниельной индикации кнопок управления на панели)
+prgPanel.ptPanel^.KEG.Status.PLC_Mode := PLCMode;	//Индикация на панели ручного/автоматического режима управления КЭГом
+prgPanel.ptPanel^.KEG.Status.Disable := fbKEG.out.Panel.AlarmCode > 0;  //Работа КЭГа заблокирована или он в аварии. Такой обобщенный сигнал
+
+aCommand();	//Обработка комманд
