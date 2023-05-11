@@ -1,0 +1,126 @@
+PLC_Mode := NOT fbA4_32DN.mGetData(dinPumps_Manual);
+
+fbPump1.prDisable := prgOPS.OutVar.Boiler_Fire OR prgOPS.OutVar.Technology_Fire;	//Блокировки при пожаре
+fbPump1.prPowerOFF := glPowerAlarm;
+fbPump1.prQF := fbA4_32DN.mGetData(dinPump1_QF);
+fbPump1.prThermPump := fbA4_32DN.mGetData(dinPump1_Sens);
+fbPump1.prKM := fbA4_32DN.mGetData(dinPump1_KM);
+fbPump1.prFlowRelay := prgFlowRelay.outFlow;
+fbPump1.prPLCMode := PLC_Mode;
+
+fbPump2.prDisable := prgOPS.OutVar.Boiler_Fire OR prgOPS.OutVar.Technology_Fire;	//Блокировки при пожаре
+fbPump2.prPowerOFF := glPowerAlarm;
+fbPump2.prQF := fbA4_32DN.mGetData(dinPump2_QF);
+fbPump2.prThermPump := fbA4_32DN.mGetData(dinPump2_Sens);
+fbPump2.prKM := fbA4_32DN.mGetData(dinPump2_KM);
+fbPump2.prFlowRelay := prgFlowRelay.outFlow;          
+fbPump2.prPLCMode := PLC_Mode;
+
+
+
+IF PLC_Mode THEN	//Управление насосами с ПЛК
+	IF eeBPG_Mode = enBPG_Mode.Maintenance THEN	//Режим "Наладка"
+		prgPumpsCircuit.aReset();	//Сброс внутренних переменных
+	ELSE	//Режим "Работа"
+		IF fbPump1.prAlarmCode <> vsdPumps.enPumpAlarm.NON AND fbPump2.prAlarmCode <> vsdPumps.enPumpAlarm.NON THEN	//Оба насоса в аварии или заблокированы
+			prgPumpsCircuit.aReset();	//Сброс внутренних переменных
+		ELSE	//Хотя бы один насос в рабочем состоянии
+			IF PumpWork_Num = 0 THEN	//Выбор запускаемого насоса
+				//Не будем обременять себя всякими выкрутасами и всегда выбираем старт 1-го насоса, если он не в аварии
+				IF fbPump1.prAlarmCode = vsdPumps.enPumpAlarm.NON THEN
+					PumpWork_Num := 1;
+				ELSE
+					PumpWork_Num := 2;
+				END_IF
+				
+				PumpChangeTimer.Start := TRUE;
+			END_IF
+		END_IF
+		
+		//Переключение насосов по таймеру
+		IF PumpChangeTimer.Done THEN
+			IF PumpWork_Num = 1 AND fbPump2.prAlarmCode = vsdPumps.enPumpAlarm.NON THEN
+				PumpWork_Num := 2;
+			ELSIF PumpWork_Num = 2 AND fbPump1.prAlarmCode = vsdPumps.enPumpAlarm.NON THEN
+				PumpWork_Num := 1;
+			END_IF
+			
+			PumpChangeTimer.Reset();
+			fbEEPROM.actWriteAll();
+		END_IF
+		
+		//Включаем 1-й насос
+		IF PumpWork_Num = 1 THEN
+			IF fbPump1.prAlarmCode <> vsdPumps.enPumpAlarm.NON THEN	//Насос 1 в аварии или заблокирован
+				PumpWork_Num := 2;
+				PumpChangeTimer.Reset();
+			ELSE
+				fbPump1.aON();
+				IF fbPump2.prState = vsdPumps.enPumpState.ON THEN	//Если второй насос включен, то подключаем таймер подкачки
+					BoosterTimer_Enable := TRUE;
+					IF BoosterTimer.Q THEN
+						fbPump2.aOFF();
+						BoosterTimer_Enable := FALSE;	//Сброс таймера подкачки
+					END_IF
+				END_IF
+			END_IF
+		END_IF
+		
+		//Включаем 2-й насос
+		IF PumpWork_Num = 2 THEN
+			IF fbPump2.prAlarmCode <> vsdPumps.enPumpAlarm.NON THEN	//Насос 2 в аварии или заблокирован
+				PumpWork_Num := 1;
+				PumpChangeTimer.Reset();
+			ELSE
+				fbPump2.aON();
+				IF fbPump1.prState = vsdPumps.enPumpState.ON THEN	//Если второй насос включен, то подключаем таймер подкачки
+					BoosterTimer_Enable := TRUE;
+					IF BoosterTimer.Q THEN
+						fbPump1.aOFF();
+						BoosterTimer_Enable := FALSE;	//Сброс таймера подкачки
+					END_IF
+				END_IF
+			END_IF
+		END_IF
+		
+		
+	END_IF
+END_IF
+
+
+
+fbPump1.mExecute();
+fbPump2.mExecute();
+
+
+fbA6_32R.mSetData(doutPump1, fbPump1.prOut);	//Сигнал на насос 1
+fbA6_32R.mSetData(doutPump2, fbPump2.prOut);	//Сигнал на насос 2
+
+PumpChangeTimer();
+BoosterTimer(IN := BoosterTimer_Enable, PT := BoosterTime);
+
+prgPanel.ptPanel^.Pumps.Pump1_State := fbPump1.prState;
+prgPanel.ptPanel^.Pumps.Status.Pump1_ON := fbPump1.prState = vsdPumps.enPumpState.ON;	//(для дополнительной индикации кнопок на панели)
+prgPanel.ptPanel^.Pumps.Pump1_AlarmCode := fbPump1.prAlarmCode;
+
+prgPanel.ptPanel^.Pumps.Pump2_State := fbPump2.prState;
+prgPanel.ptPanel^.Pumps.Status.Pump2_ON := fbPump2.prState = vsdPumps.enPumpState.ON;	//(для дополнительной индикации кнопок на панели)
+prgPanel.ptPanel^.Pumps.Pump2_AlarmCode := fbPump2.prAlarmCode;
+
+prgPanel.ptPanel^.Pumps.Work_Num := PumpWork_Num;
+
+prgPanel.ptPanel^.Pumps.TimeWork1 := fbPump1.prWorkTime;	//Время наработки Насоса 1
+prgPanel.ptPanel^.Pumps.TimeWork2 := fbPump2.prWorkTime;	//Время наработки Насоса 2
+prgPanel.ptPanel^.Pumps.TimeOFF := PumpChangeTimer.TimeOFF;	//Оставшееся время до переключения
+
+
+prgPanel.ptPanel^.Pumps.Status.PLC_Mode := PLC_Mode;	//Индикация на панели ручного/автоматического режима управления насосами
+
+
+prgPumpsCircuit.aCommandPanel();	//Обработка команд с панели
+
+//Коли решили использовать вермя наработки, то его надо записывать в файл (для хранения)
+//У ПЛК 304 нет сигнализации пропажи питания, чтобы можно было записать данные только  в этот момент.
+//Можно поставить таймер на 1 час, и записывать данные один раз в час.
+//Можно делать запись при смене насосов. При частом отключении питания могут терятья данные о наработке.
+//С другой стороны, это не так часто должно происходить. Пока остановимся на последнем варианте.
