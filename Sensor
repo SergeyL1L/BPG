@@ -1,0 +1,30 @@
+//Входные данные для ФБ датчиков и работа ФБ
+FOR i := 1 TO cNumSensor DO
+	arSensors[i].in.Operational := fb8AC.mGetData(Module := arSensors[i].prEepromAdr^.Chanel.NumModule,//Значение канала модуля Овен
+	 											Chanel := arSensors[i].prEepromAdr^.Chanel.NumChanel);	 //и код ошибки канала модуля Овен
+																																			
+	//Код ошибки связи с модуля Модбас Слейв среды Кодесис
+	IF arSensors[i].prEepromAdr^.Chanel.NumModule = cA1_8AC THEN
+		arSensors[i].in.Operational.MB_ErrorCode := fbMB_Slave_Error[cA1_8AC].ErrorCode;
+	ELSIF arSensors[i].prEepromAdr^.Chanel.NumModule = cA2_8AC THEN
+		arSensors[i].in.Operational.MB_ErrorCode := fbMB_Slave_Error[cA2_8AC].ErrorCode;
+	END_IF
+	
+	arSensors[i].aExecute();
+	
+	//Передача текущих данных на панель
+	prgPanel.ptPanel^.Sensor.arActual[i] := arSensors[i].out.Actual;
+		
+	//Передача на панель значений в виде строк
+	prgPanel.mValueToArray(i, arSensors[i].out.ValueStr);
+			   
+END_FOR
+
+//Если датчик загазованности в техотсеке не испльзуется (или у него нет аналогового выхода), то надо передавать нулевое состояние (иначе передаётся обрыв)
+	IF NOT eeGasAnalyzer.Enable_QE5_2_Analog THEN
+		prgPanel.ptPanel^.Sensor.arActual[cQE5_2].State := 0;
+	END_IF
+	
+
+aSetParam();	//Настройка параметров датчиков
+aSetThreshold();	//Настройка порогов
