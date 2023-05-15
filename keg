@@ -1,4 +1,4 @@
-PLCMode := NOT fbA4_32DN.mGetData(dinKEG_Manual);
+PLCMode := NOT fbA4_32DN.mGetData(dinKEG_Manual); 
 
 //fbKEG.in.Blocking.ExtDisable := 
 
