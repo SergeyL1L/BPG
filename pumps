@@ -1,4 +1,4 @@
-PLC_Mode := NOT fbA4_32DN.mGetData(dinPumps_Manual);
+PLC_Mode := NOT fbA4_32DN.mGetData(dinPumps_Manual); 
 
 fbPump1.prDisable := prgOPS.OutVar.Boiler_Fire OR prgOPS.OutVar.Technology_Fire;	//Блокировки при пожаре
 fbPump1.prPowerOFF := glPowerAlarm;
