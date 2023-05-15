@@ -1,4 +1,4 @@
-//Запрос текущих блокировок
+//Запрос текущих блокировок 
 IF prgPanel.ptPanel^.Blocking.Command.GetData THEN
 	prgPanel.ptPanel^.Blocking.ForSetting := eeSensorUsing;
 	
