@@ -34,4 +34,4 @@ prgPanel.ptPanel^.KEG.Status.ON := fbKEG.out.Panel.State = vsdValves.enKegState.
 prgPanel.ptPanel^.KEG.Status.PLC_Mode := PLCMode;	//Индикация на панели ручного/автоматического режима управления КЭГом
 prgPanel.ptPanel^.KEG.Status.Disable := fbKEG.out.Panel.AlarmCode > 0;  //Работа КЭГа заблокирована или он в аварии. Такой обобщенный сигнал
 
-aCommand();	//Обработка комманд
+aCommand();	//Обработка комманд 
