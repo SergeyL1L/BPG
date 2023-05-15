@@ -1,4 +1,4 @@
-//ОПС
+//ОПС 
 	SoundOPS.cBoiler_Fire := prgOPS.OutVar.Boiler_Fire;
 	SoundOPS.cTechnology_Fire := prgOPS.OutVar.Technology_Fire;
 	
