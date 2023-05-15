@@ -1,4 +1,4 @@
-//Входные данные для ФБ датчиков и работа ФБ
+//Входные данные для ФБ датчиков и работа ФБ 
 FOR i := 1 TO cNumSensor DO
 	arSensors[i].in.Operational := fb8AC.mGetData(Module := arSensors[i].prEepromAdr^.Chanel.NumModule,//Значение канала модуля Овен
 	 											Chanel := arSensors[i].prEepromAdr^.Chanel.NumChanel);	 //и код ошибки канала модуля Овен
